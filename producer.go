@@ -9,10 +9,10 @@ import (
 )
 
 type Event struct {
-    EventType string `json:"type"`
-    EventAction string `json:"action"`
-    Version string `json:"version"`
-    Source interface{} `json:"source"` //allow any struct to be used as source
+    EventType   string      `json:"type"`
+    EventAction string      `json:"action"`
+    Version     string      `json:"version"`
+    Source      interface{} `json:"source"` //allow any struct to be used as source
 }
 
 type EventSource struct {
@@ -22,11 +22,11 @@ type EventSource struct {
 }
 
 type Address struct {
-    Street *string `json:"street"`
+    Street          *string `json:"street"`
     StreetAlternate *string `json:"street_alternate"`
-    City *string `json:"city"`
-    State *string `json:"state"`
-    PostalCode *string `json:"postal_code"`
+    City            *string `json:"city"`
+    State           *string `json:"state"`
+    PostalCode      *string `json:"postal_code"`
 }
 
 type Location struct {
@@ -35,24 +35,24 @@ type Location struct {
 }
 
 type Place struct {
-    Id string `json:"id"`
-    PolygonId  string `json:"polygon_id"`
-    OrganizationId *string `json:"organization_id"`
-    Name string `json:"name"`
-    ChainId *string `json:"chain_id"`
-    Location Location `json:"location"`
-    Address Address `json:"address"`
-    Categories *[]string `json:"categories"`
-    Created *time.Time `json:"created"`
-    LastModified *time.Time `json:"last_modified"`
-    Enabled bool `json:"enabled"`
+    Id             string     `json:"id"`
+    PolygonId      string     `json:"polygon_id"`
+    OrganizationId *string    `json:"organization_id"`
+    Name           string     `json:"name"`
+    ChainId        *string    `json:"chain_id"`
+    Location       Location   `json:"location"`
+    Address        Address    `json:"address"`
+    Categories     *[]string  `json:"categories"`
+    Created        *time.Time `json:"created"`
+    LastModified   *time.Time `json:"last_modified"`
+    Enabled        bool       `json:"enabled"`
 }
 
 func strPtr(s string) (*string) {
     return &s
 }
 
-func serializeEvent(source *EventSource, action string) (out []byte){
+func serializeEvent(source *EventSource, action string) (out []byte) {
     
     message := &Event{
         source.name,
@@ -90,7 +90,6 @@ func sendEvent(targetTopic string, message []byte) {
         }
     }()
     
-    
     //include a suffix for the topic depending on the environment
     topic := fmt.Sprintf("%s-%s", targetTopic, os.Getenv("ENVIRONMENT"))
     // Produce messages to topic (asynchronously)
@@ -118,14 +117,14 @@ func main() {
         "Cup A Joe",
         strPtr("10000020"),
         Location{98.239, -78.990},
-    Address{strPtr("123 main st"), nil, strPtr("Birmingham"), strPtr("AL"), strPtr("22545")},
-    nil,
-    nil,
+        Address{strPtr("123 main st"), nil, strPtr("Birmingham"), strPtr("AL"), strPtr("22545")},
+        nil,
+        nil,
         nil,
         true}
     
     //serialize the message and include the EventType, EventAction, and  source version (in case we make any breaking changes)
     message := serializeEvent(&EventSource{&source, "1.0", "Place"}, "Update")
-
+    
     sendEvent("visit", message)
 }
