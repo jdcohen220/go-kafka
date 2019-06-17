@@ -3,7 +3,8 @@ package main
 import (
     "encoding/json"
     "fmt"
-    "gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
+    "github.com/Shopify/sarama"
+    "log"
     "os"
     "time"
 )
@@ -48,6 +49,22 @@ type Place struct {
     Enabled        bool       `json:"enabled"`
 }
 
+type AudienceVersion struct {
+    Id string `json:"id"`
+    AudienceId string `json:"audience_id"`
+    JobStart *time.Time `json:"job_start"`
+    JobFinish *time.Time `json:"job_finish"`
+    JobFailed *time.Time `json:"job_failed"`
+    ParentId *string `json:"parent_id"`
+    DeviceCount *int `json:"device_count"`
+    FirstAction *time.Time `json:"first_action"`
+    DownloadUrl *string `json:"download_url"`
+    DownloadUrlExpiration *time.Time `json:"download_url_expiration"`
+    Created *time.Time `json:"created"`
+    LastModified *time.Time `json:"last_modified"`
+    Enabled bool `json:"enabled"`
+}
+
 func strPtr(s string) (*string) {
     return &s
 }
@@ -68,40 +85,35 @@ func serializeEvent(source *EventSource, action string) (out []byte) {
     return serializedMessage
 }
 
-func sendEvent(targetTopic string, message []byte) {
-    p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost"})
+func sendEvent(topic string, message []byte) {
+    producer := newProducer([]string{os.Getenv("KAFKA_SERVER_AND_PORT")})
+    
+    partition, offset, err := producer.SendMessage(&sarama.ProducerMessage{Topic:"sarama", Value: sarama.StringEncoder(message)})
+    
     if err != nil {
-        panic(err)
+        fmt.Println("error!")
+    } else {
+        // The tuple (topic, partition, offset) can be used as a unique identifier
+        // for a message in a Kafka cluster.
+        fmt.Printf("Message produced with unique identifier: %s/%d/%d", topic, partition, offset)
     }
     
-    defer p.Close()
+}
+
+
+func newProducer(brokerList []string) sarama.SyncProducer {
     
-    // Delivery report handler for produced messages
-    go func() {
-        for e := range p.Events() {
-            switch ev := e.(type) {
-            case *kafka.Message:
-                if ev.TopicPartition.Error != nil {
-                    fmt.Printf("Delivery failed: %v\n", ev.TopicPartition)
-                } else {
-                    fmt.Printf("Delivered message to %v\n", ev.TopicPartition)
-                }
-            }
-        }
-    }()
+    config := sarama.NewConfig()
+    config.Producer.RequiredAcks = sarama.WaitForLocal       // Only wait for the leader to ack
+    config.Producer.Return.Successes = true
+    config.Producer.Flush.Frequency = 500 * time.Millisecond // Flush batches every 500ms
     
-    //include a suffix for the topic depending on the environment
-    topic := fmt.Sprintf("%s-%s", targetTopic, os.Getenv("ENVIRONMENT"))
-    // Produce messages to topic (asynchronously)
-    for _, word := range []string{string(message)} {
-        p.Produce(&kafka.Message{
-            TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-            Value:          []byte(word),
-        }, nil)
+    producer, err := sarama.NewSyncProducer(brokerList, config)
+    if err != nil {
+        log.Fatalln("Failed to start Sarama producer:", err)
     }
     
-    // Wait for message deliveries before shutting down
-    p.Flush(15 * 1000)
+    return producer
 }
 
 /**
@@ -111,20 +123,23 @@ func main() {
     
     //build object for the source of an event
     source := Place{
-        "12345",
-        "678910",
-        strPtr("100"),
-        "Cup A Joe",
-        strPtr("10000020"),
-        Location{98.239, -78.990},
-        Address{strPtr("123 main st"), nil, strPtr("Birmingham"), strPtr("AL"), strPtr("22545")},
-        nil,
-        nil,
-        nil,
-        true}
+       "12345",
+       "678910",
+       strPtr("100"),
+       "Cup A Joe",
+       strPtr("10000020"),
+       Location{98.239, -78.990},
+       Address{strPtr("123 main st"), nil, strPtr("Birmingham"), strPtr("AL"), strPtr("22545")},
+       nil,
+       nil,
+       nil,
+       true}
     
     //serialize the message and include the EventType, EventAction, and  source version (in case we make any breaking changes)
     message := serializeEvent(&EventSource{&source, "1.0", "Place"}, "Update")
+    //
+    //sendEvent("visit", message)
     
-    sendEvent("visit", message)
+    sendEvent("sarama", message)
+    
 }
